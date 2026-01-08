@@ -29,9 +29,13 @@ function removeFile(FilePath) {
 
 router.get("/", async (req, res) => {
   let num = req.query.number;
+  
   async function RobinPair() {
-    // එක් එක් රික්වෙස්ට් එකට ෆයිල් එකක් හැදෙනවා
+    // 1. කලින් ඉතිරි වෙච්ච පරණ ෆයිල් මොනවා හරි තිබ්බොත් අලුත් එකට කලින් ඒවා මකනවා (Safety First)
+    removeFile("./session");
+
     const { state, saveCreds } = await useMultiFileAuthState(`./session`);
+    
     try {
       let RobinPairWeb = makeWASocket({
         auth: {
@@ -39,25 +43,37 @@ router.get("/", async (req, res) => {
           keys: makeCacheableSignalKeyStore(
             state.keys,
             pino({ level: "fatal" }).child({ level: "fatal" })
-          ),
+          )
         },
         printQRInTerminal: false,
         logger: pino({ level: "fatal" }).child({ level: "fatal" }),
-        browser: Browsers.macOS("Safari"), // ඔයා මුලින් දුන්න එකමයි
+        // ✅ Safari වෙනුවට Ubuntu Chrome දැම්මා (More Stable for linking)
+        browser: ["Ubuntu", "Chrome", "20.0.04"], 
       });
 
       if (!RobinPairWeb.authState.creds.registered) {
         await delay(1500);
         num = num.replace(/[^0-9]/g, "");
         const code = await RobinPairWeb.requestPairingCode(num);
+        
         if (!res.headersSent) {
           await res.send({ code });
         }
+
+        // ✅ විනාඩි 3 කින් session එක Auto Delete කරන Timer එක (180,000 ms)
+        // යූසර් ලින්ක් කළත් නැතත් විනාඩි 3 කින් සර්වර් එක Clean වෙනවා
+        setTimeout(() => {
+          if (fs.existsSync("./session")) {
+            removeFile("./session");
+            console.log("🕒 3 Minutes Timeout: Session files deleted for security.");
+          }
+        }, 180000); 
       }
 
       RobinPairWeb.ev.on("creds.update", saveCreds);
       RobinPairWeb.ev.on("connection.update", async (s) => {
         const { connection, lastDisconnect } = s;
+        
         if (connection === "open") {
           try {
             await delay(10000);
@@ -77,7 +93,6 @@ router.get("/", async (req, res) => {
 
             console.log(`✅ Session securely stored in MongoDB for ${user_jid}`);
 
-            // 2. මැසේජ් එක (Plain Text Only - Error නොවී යන්න)
             const success_msg = `╔════════════════════╗
   ✨ *ZANTA-MD CONNECTED* ✨
 ╚════════════════════╝
@@ -93,7 +108,6 @@ https://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B
 
 *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴢᴀɴᴛᴀ ᴏꜰᴄ* 🧬`;
 
-            // ❌ Image සහ Ad Card එක අයින් කළා, Text විතරක් යැවෙනවා
             await RobinPairWeb.sendMessage(user_jid, { text: success_msg });
 
           } catch (e) {
@@ -103,8 +117,6 @@ https://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B
             await delay(2000);
             removeFile("./session");
             console.log("♻️ Cleanup Done: Local session files cleared.");
-            
-            // 🚀 Render වලදී "Waiting" වෙන්නේ නැතුව ඉන්න process එක Restart කරනවා
             process.exit(0); 
           }
 
@@ -120,6 +132,7 @@ https://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B
       });
     } catch (err) {
       console.log("Service Error:", err);
+      removeFile("./session"); // Error එකක් ආවොත් ෆයිල්ස් මකනවා
       RobinPair();
     }
   }
