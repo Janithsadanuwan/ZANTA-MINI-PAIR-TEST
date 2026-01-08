@@ -21,18 +21,30 @@ const SessionSchema = new mongoose.Schema({
 });
 const Session = mongoose.models.Session || mongoose.model("Session", SessionSchema);
 
-// ✅ බලෙන්ම මකන්න පුළුවන් වෙන්න හදපු removeFile එක
-function removeFile(FilePath) {
-  if (!fs.existsSync(FilePath)) return false;
-  fs.rmSync(FilePath, { recursive: true, force: true });
+// ✅ ෆයිල්ස් මකන එක ආරක්ෂිතව කරන්න හදපු Function එක
+function clearSessionFolder() {
+  const folderPath = "./session";
+  if (fs.existsSync(folderPath)) {
+    fs.readdirSync(folderPath).forEach((file) => {
+      try {
+        fs.rmSync(`${folderPath}/${file}`, { recursive: true, force: true });
+      } catch (e) {
+        console.log("Cleanup error:", e.message);
+      }
+    });
+    console.log("🧹 Session folder cleared.");
+  } else {
+    fs.mkdirSync(folderPath);
+    console.log("📁 Session folder created.");
+  }
 }
 
 router.get("/", async (req, res) => {
   let num = req.query.number;
   
   async function RobinPair() {
-    // 1. කලින් ඉතිරි වෙච්ච පරණ ෆයිල් මොනවා හරි තිබ්බොත් අලුත් එකට කලින් ඒවා මකනවා (Safety First)
-    removeFile("./session");
+    // 1. මුලින්ම පරණ session data විතරක් මකනවා (Folder එක තියෙද්දී)
+    clearSessionFolder();
 
     const { state, saveCreds } = await useMultiFileAuthState(`./session`);
     
@@ -47,7 +59,7 @@ router.get("/", async (req, res) => {
         },
         printQRInTerminal: false,
         logger: pino({ level: "fatal" }).child({ level: "fatal" }),
-        // ✅ Safari වෙනුවට Ubuntu Chrome දැම්මා (More Stable for linking)
+        // ✅ වඩාත් ස්ථාවර Ubuntu Chrome බ්‍රවුසරය
         browser: ["Ubuntu", "Chrome", "20.0.04"], 
       });
 
@@ -60,12 +72,17 @@ router.get("/", async (req, res) => {
           await res.send({ code });
         }
 
-        // ✅ විනාඩි 3 කින් session එක Auto Delete කරන Timer එක (180,000 ms)
-        // යූසර් ලින්ක් කළත් නැතත් විනාඩි 3 කින් සර්වර් එක Clean වෙනවා
+        // ✅ විනාඩි 3 කින් creds.json එක පමණක් මකා දමනවා
+        // මෙතනදී මුළු ෆෝල්ඩරයම මකන්නේ නැති නිසා ENOENT error එක එන්නේ නැහැ
         setTimeout(() => {
-          if (fs.existsSync("./session")) {
-            removeFile("./session");
-            console.log("🕒 3 Minutes Timeout: Session files deleted for security.");
+          try {
+            const credsPath = "./session/creds.json";
+            if (fs.existsSync(credsPath)) {
+              fs.unlinkSync(credsPath);
+              console.log("🕒 3 Minutes Timeout: creds.json deleted for security.");
+            }
+          } catch (e) {
+            console.log("Timeout cleanup error:", e.message);
           }
         }, 180000); 
       }
@@ -113,10 +130,10 @@ https://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B
           } catch (e) {
             console.error("❌ Database or Messaging Error:", e);
           } finally {
-            // 3. Cleanup & Restart
+            // 3. වැඩේ ඉවර වුණාම ක්ලීන් කරලා ප්‍රොසෙස් එක නවත්වනවා
             await delay(2000);
-            removeFile("./session");
-            console.log("♻️ Cleanup Done: Local session files cleared.");
+            clearSessionFolder();
+            console.log("♻️ Cleanup Done.");
             process.exit(0); 
           }
 
@@ -132,7 +149,7 @@ https://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B
       });
     } catch (err) {
       console.log("Service Error:", err);
-      removeFile("./session"); // Error එකක් ආවොත් ෆයිල්ස් මකනවා
+      clearSessionFolder(); 
       RobinPair();
     }
   }
