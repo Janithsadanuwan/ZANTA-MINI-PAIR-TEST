@@ -41,9 +41,9 @@ function clearSessionFolder() {
 
 router.get("/", async (req, res) => {
   let num = req.query.number;
-  
+  let pairingTimeout; // ටයිමර් එක නවත්වන්න පාවිච්චි කරන වේරියබල් එක
+
   async function RobinPair() {
-    // 1. මුලින්ම පරණ session data විතරක් මකනවා (Folder එක තියෙද්දී)
     clearSessionFolder();
 
     const { state, saveCreds } = await useMultiFileAuthState(`./session`);
@@ -59,7 +59,6 @@ router.get("/", async (req, res) => {
         },
         printQRInTerminal: false,
         logger: pino({ level: "fatal" }).child({ level: "fatal" }),
-        // ✅ වඩාත් ස්ථාවර Ubuntu Chrome බ්‍රවුසරය
         browser: ["Ubuntu", "Chrome", "20.0.04"], 
       });
 
@@ -72,18 +71,10 @@ router.get("/", async (req, res) => {
           await res.send({ code });
         }
 
-        // ✅ විනාඩි 3 කින් creds.json එක පමණක් මකා දමනවා
-        // මෙතනදී මුළු ෆෝල්ඩරයම මකන්නේ නැති නිසා ENOENT error එක එන්නේ නැහැ
-        setTimeout(() => {
-          try {
-            const credsPath = "./session/creds.json";
-            if (fs.existsSync(credsPath)) {
-              fs.unlinkSync(credsPath);
-              console.log("🕒 3 Minutes Timeout: creds.json deleted for security.");
-            }
-          } catch (e) {
-            console.log("Timeout cleanup error:", e.message);
-          }
+        // ✅ FAIL SAFE: යූසර් ලින්ක් නොකළොත් විනාඩි 3කින් මකන්න
+        pairingTimeout = setTimeout(() => {
+          console.log("🕒 3 Minutes Timeout: Clearing session.");
+          clearSessionFolder();
         }, 180000); 
       }
 
@@ -92,12 +83,14 @@ router.get("/", async (req, res) => {
         const { connection, lastDisconnect } = s;
         
         if (connection === "open") {
+          // ✅ ලින්ක් වුණ නිසා අර විනාඩි 3ක ටයිමර් එක නවත්වන්න (මොකද දැන් ෆයිල්ස් මකන්න ඕනේ නැහැ)
+          if (pairingTimeout) clearTimeout(pairingTimeout);
+
           try {
             await delay(10000);
             const auth_path = "./session/creds.json";
             const user_jid = jidNormalizedUser(RobinPairWeb.user.id);
 
-            // 1. MongoDB එකට සේව් කිරීම
             const session_json = JSON.parse(fs.readFileSync(auth_path, "utf8"));
             await Session.findOneAndUpdate(
               { number: user_jid },
@@ -108,29 +101,15 @@ router.get("/", async (req, res) => {
               { upsert: true }
             );
 
-            console.log(`✅ Session securely stored in MongoDB for ${user_jid}`);
+            console.log(`✅ Session stored for ${user_jid}`);
 
-            const success_msg = `╔════════════════════╗
-  ✨ *ZANTA-MD CONNECTED* ✨
-╚════════════════════╝
-
-*🚀 Status:* Successfully Linked ✅
-*👤 User:* ${user_jid.split('@')[0]}
-*🗄️ Database:* MongoDB Secured 🔒
-
-> ඔබේ දත්ත අපගේ Database එකේ ආරක්ෂිතව තැන්පත් කරන ලදී. දැන් බොට් ස්වයංක්‍රීයව ක්‍රියාත්මක වනු ඇත.
-
-*📢 Join our official channel for updates:*
-https://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B
-
-*ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴢᴀɴᴛᴀ ᴏꜰᴄ* 🧬`;
+            const success_msg = `╔════════════════════╗\n ✨ *ZANTA-MD CONNECTED* ✨\n╚════════════════════╝\n\n*🚀 Status:* Successfully Linked ✅\n*👤 User:* ${user_jid.split('@')[0]}\n*🗄️ Database:* MongoDB Secured 🔒\n\n> ඔබේ දත්ත අපගේ Database එකේ ආරක්ෂිතව තැන්පත් කරන ලදී. දැන් බොට් ස්වයංක්‍රීයව ක්‍රියාත්මක වනු ඇත.\n\n*📢 Join our official channel:* \nhttps://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B\n\n*ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴢᴀɴᴛᴀ ᴏꜰᴄ* 🧬`;
 
             await RobinPairWeb.sendMessage(user_jid, { text: success_msg });
 
           } catch (e) {
-            console.error("❌ Database or Messaging Error:", e);
+            console.error("❌ DB/Msg Error:", e);
           } finally {
-            // 3. වැඩේ ඉවර වුණාම ක්ලීන් කරලා ප්‍රොසෙස් එක නවත්වනවා
             await delay(2000);
             clearSessionFolder();
             console.log("♻️ Cleanup Done.");
