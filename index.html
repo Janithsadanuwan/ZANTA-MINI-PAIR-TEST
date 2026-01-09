@@ -12,7 +12,7 @@
             background: #000; 
             min-height: 100vh; 
             overflow-x: hidden; 
-            overflow-y: auto; /* Scroll කරන්න පුළුවන් වෙන්න */
+            overflow-y: auto; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
@@ -50,6 +50,7 @@
             padding: 60px 20px 40px 20px;
             background: rgba(0, 212, 255, 0.03); 
             backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
             border: 1px solid rgba(182, 227, 255, 0.1);
             border-radius: 40px;
             box-shadow: 0 15px 35px rgba(0, 191, 255, 0.1);
@@ -165,9 +166,10 @@
         </div>
 
         <div class="btn-container">
-            <a href="https://continental-nelle-zanta-md-60c8408b.koyeb.app/" class="btn">Link with Pair Code</a>
-            <a href="qr-link-page.html" class="btn">Link with QR Code</a>
-            <a href="index.html" class="back-link">← Back to Home</a>
+            <a href="/pair-page" class="btn">Link with Pair Code</a>
+            <a href="/qr-page" class="btn">Link with QR Code</a>
+            
+            <a href="https://github.com/Akashkavindu/ZANTA_MD" class="back-link">← GitHub Repository</a>
         </div>
 
         <div class="music-tag">🎵 Playing: Pal Pal...</div>
