@@ -7,10 +7,10 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 
 // ✅ MongoDB Connection
-const MONGODB_URL = process.env.MONGODB_URL || "ඔයාගේ_mongodb_url_එක_මෙතන_දාන්න"; 
+const MONGODB_URL = process.env.MONGODB_URL || "YOUR_MONGODB_URL_HERE"; 
 
-if (!MONGODB_URL) {
-    console.error("❌ MONGODB_URL is missing in environment variables!");
+if (!MONGODB_URL || MONGODB_URL === "YOUR_MONGODB_URL_HERE") {
+    console.error("❌ MONGODB_URL is missing! Please set it in Environment Variables.");
 } else {
     mongoose.connect(MONGODB_URL)
         .then(() => console.log('✅ MongoDB Connected Successfully'))
@@ -21,41 +21,41 @@ if (!MONGODB_URL) {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ✅ Static Files (HTML, CSS, JS තියෙන ෆෝල්ඩර් එක)
-app.use(express.static(path.join(__dirname, 'public'))); 
-// සටහන: ඔයාගේ html ෆයිල්ස් තියෙන්නේ වෙනම ෆෝල්ඩර් එකක නම් ඒ නම දෙන්න.
+// HTML, CSS, Images තියෙන Root Folder එක පාවිච්චි කරන්න
+app.use(express.static(path.join(__dirname, '/'))); 
 
 // ✅ Routes Importing
-let codeRouter = require('./pair'); // Pairing Code සඳහා
-let qrRouter = require('./qr');     // QR Code සඳහා
+const codeRouter = require('./pair'); 
+const qrRouter = require('./qr');     
 
-// ✅ Route Registration
+// ✅ API Route Registration
 app.use('/code', codeRouter);
 app.use('/qr', qrRouter);
 
-// ✅ Page Navigation
-// Main Page (අර බටන් දෙක තියෙන එක)
+// ✅ Page Navigation Routes
+
+// 1. මුලින්ම පේන පිටුව (ඔයාගේ බටන් දෙක තියෙන index.html එක)
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html')); 
 });
 
-// Pairing Code Page
-app.get('/pair', (req, res) => {
+// 2. Pairing Code එක ගහන පේජ් එකට යන්න
+app.get('/pair-page', (req, res) => {
     res.sendFile(path.join(__dirname, 'pair.html'));
 });
 
-// QR Code Page
-app.get('/qr-link', (req, res) => {
+// 3. QR Code එක පෙන්වන පේජ් එකට යන්න
+app.get('/qr-page', (req, res) => {
     res.sendFile(path.join(__dirname, 'qr.html'));
 });
 
 // ✅ Server Start
 app.listen(PORT, () => {
     console.log(`
-╔═══════════════════════════════════════════╗
-     🚀 ZANTA-MD WEB SERVER STARTED
-     🌐 Port: ${PORT}
-     ✅ Status: Online
-╚═══════════════════════════════════════════╝
+╔════════════════════════════════════════════╗
+      🧬 ZANTA-MD OFFICIAL WEB SERVER
+      🚀 Started on Port: ${PORT}
+      ✅ Status: Online
+╚════════════════════════════════════════════╝
     `);
 });
