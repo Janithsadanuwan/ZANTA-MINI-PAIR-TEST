@@ -1,6 +1,5 @@
 const express = require("express");
 const fs = require("fs");
-const { exec } = require("child_process");
 const mongoose = require("mongoose");
 let router = express.Router();
 const pino = require("pino");
@@ -21,7 +20,7 @@ const SessionSchema = new mongoose.Schema({
 });
 const Session = mongoose.models.Session || mongoose.model("Session", SessionSchema);
 
-// ✅ ෆයිල්ස් මකන එක ආරක්ෂිතව කරන්න හදපු Function එක
+// ✅ සෙෂන් ෆෝල්ඩර් එක පිරිසිදු කරන Function එක
 function clearSessionFolder() {
   const folderPath = "./session";
   if (fs.existsSync(folderPath)) {
@@ -33,15 +32,12 @@ function clearSessionFolder() {
       }
     });
     console.log("🧹 Session folder cleared.");
-  } else {
-    fs.mkdirSync(folderPath);
-    console.log("📁 Session folder created.");
   }
 }
 
 router.get("/", async (req, res) => {
   let num = req.query.number;
-  let pairingTimeout; // ටයිමර් එක නවත්වන්න පාවිච්චි කරන වේරියබල් එක
+  let pairingTimeout; 
 
   async function RobinPair() {
     clearSessionFolder();
@@ -52,14 +48,12 @@ router.get("/", async (req, res) => {
       let RobinPairWeb = makeWASocket({
         auth: {
           creds: state.creds,
-          keys: makeCacheableSignalKeyStore(
-            state.keys,
-            pino({ level: "fatal" }).child({ level: "fatal" })
-          )
+          keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
         },
         printQRInTerminal: false,
-        logger: pino({ level: "fatal" }).child({ level: "fatal" }),
-        browser: ["Ubuntu", "Chrome", "20.0.04"], 
+        logger: pino({ level: "fatal" }),
+        // ✅ බ්‍රවුසර් එක Safari (macOS) ලෙස වෙනස් කළා
+        browser: Browsers.macOS("Safari"), 
       });
 
       if (!RobinPairWeb.authState.creds.registered) {
@@ -71,11 +65,11 @@ router.get("/", async (req, res) => {
           await res.send({ code });
         }
 
-        // ✅ FAIL SAFE: යූසර් ලින්ක් නොකළොත් විනාඩි 3කින් මකන්න
+        // ✅ FAIL-SAFE: යූසර් ලින්ක් නොවුණොත් විනාඩි 2කින් සෙෂන් එක මකන්න
         pairingTimeout = setTimeout(() => {
-          console.log("🕒 3 Minutes Timeout: Clearing session.");
+          console.log("🕒 Timeout: User didn't link. Clearing session.");
           clearSessionFolder();
-        }, 180000); 
+        }, 120000); 
       }
 
       RobinPairWeb.ev.on("creds.update", saveCreds);
@@ -83,7 +77,6 @@ router.get("/", async (req, res) => {
         const { connection, lastDisconnect } = s;
         
         if (connection === "open") {
-          // ✅ ලින්ක් වුණ නිසා අර විනාඩි 3ක ටයිමර් එක නවත්වන්න (මොකද දැන් ෆයිල්ස් මකන්න ඕනේ නැහැ)
           if (pairingTimeout) clearTimeout(pairingTimeout);
 
           try {
@@ -94,41 +87,31 @@ router.get("/", async (req, res) => {
             const session_json = JSON.parse(fs.readFileSync(auth_path, "utf8"));
             await Session.findOneAndUpdate(
               { number: user_jid },
-              {
-                number: user_jid,
-                creds: session_json
-              },
+              { number: user_jid, creds: session_json },
               { upsert: true }
             );
 
-            console.log(`✅ Session stored for ${user_jid}`);
-
-            const success_msg = `╔════════════════════╗\n ✨ *ZANTA-MD CONNECTED* ✨\n╚════════════════════╝\n\n*🚀 Status:* Successfully Linked ✅\n*👤 User:* ${user_jid.split('@')[0]}\n*🗄️ Database:* MongoDB Secured 🔒\n\n> ඔබේ දත්ත අපගේ Database එකේ ආරක්ෂිතව තැන්පත් කරන ලදී. දැන් බොට් ස්වයංක්‍රීයව ක්‍රියාත්මක වනු ඇත.\n\n*📢 Join our official channel:* \nhttps://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B\n\n*ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴢᴀɴᴛᴀ ᴏꜰᴄ* 🧬`;
-
+            const success_msg = `╔════════════════════╗\n ✨ *ZANTA-MD CONNECTED* ✨\n╚════════════════════╝\n\n*🚀 Status:* Successfully Linked ✅\n\n> ඔබේ දත්ත සුරැකින ලදී.`;
             await RobinPairWeb.sendMessage(user_jid, { text: success_msg });
 
+            console.log(`✅ Success for ${user_jid}`);
+
           } catch (e) {
-            console.error("❌ DB/Msg Error:", e);
+            console.error("❌ Error:", e);
           } finally {
+            // ✅ වැඩේ ඉවර වුණාම සෙෂන් එක මකලා process එක close කරනවා
             await delay(2000);
             clearSessionFolder();
-            console.log("♻️ Cleanup Done.");
             process.exit(0); 
           }
-
-        } else if (
-          connection === "close" &&
-          lastDisconnect &&
-          lastDisconnect.error &&
-          lastDisconnect.error.output.statusCode !== 401
-        ) {
-          await delay(10000);
+        } else if (connection === "close" && lastDisconnect?.error?.output?.statusCode !== 401) {
+          await delay(5000);
           RobinPair();
         }
       });
     } catch (err) {
       console.log("Service Error:", err);
-      clearSessionFolder(); 
+      clearSessionFolder();
       RobinPair();
     }
   }
