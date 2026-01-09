@@ -1,7 +1,7 @@
 const express = require("express");
 const fs = require("fs");
 const mongoose = require("mongoose");
-const qrcode = require("qrcode"); // QR Code එක image එකක් කරන්න ඕන වෙනවා
+const qrcode = require("qrcode"); 
 let router = express.Router();
 const pino = require("pino");
 const {
@@ -9,10 +9,11 @@ const {
   useMultiFileAuthState,
   delay,
   makeCacheableSignalKeyStore,
+  Browsers,
   jidNormalizedUser,
 } = require("@whiskeysockets/baileys");
 
-// MongoDB Session Schema (ඔයාගේ කලින් එකමයි)
+// MongoDB Session Schema
 const SessionSchema = new mongoose.Schema({
   number: { type: String, required: true, unique: true },
   creds: { type: Object, required: true },
@@ -20,9 +21,9 @@ const SessionSchema = new mongoose.Schema({
 });
 const Session = mongoose.models.Session || mongoose.model("Session", SessionSchema);
 
-// Session folder පිරිසිදු කරන එක
+// ✅ සෙෂන් ෆෝල්ඩර් එක පිරිසිදු කරන Function එක
 function clearSessionFolder() {
-  const folderPath = "./session_qr"; // QR සඳහා වෙනම ෆෝල්ඩර් එකක් පාවිච්චි කිරීම ආරක්ෂිතයි
+  const folderPath = "./session_qr";
   if (fs.existsSync(folderPath)) {
     fs.readdirSync(folderPath).forEach((file) => {
       try {
@@ -31,6 +32,7 @@ function clearSessionFolder() {
         console.log("Cleanup error:", e.message);
       }
     });
+    console.log("🧹 QR Session folder cleared.");
   } else {
     fs.mkdirSync(folderPath);
   }
@@ -47,17 +49,16 @@ router.get("/", async (req, res) => {
           creds: state.creds,
           keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
         },
-        printQRInTerminal: false, // ටර්මිනල් එකේ ප්‍රින්ට් කරන්නේ නැහැ
+        printQRInTerminal: false,
         logger: pino({ level: "fatal" }),
-        browser: ["Zanta-MD", "Chrome", "1.0.0"],
+        // ✅ බ්‍රවුසර් එක Safari (macOS) ලෙස වෙනස් කළා
+        browser: Browsers.macOS("Safari"), 
       });
 
-      // ✅ QR එක ලැබුණු විට එය frontend එකට යැවීම
       RobinQRWeb.ev.on("connection.update", async (s) => {
         const { connection, lastDisconnect, qr } = s;
 
         if (qr) {
-          // QR එක image එකක් (Data URL) බවට පත් කරලා response එක යවනවා
           const qrImage = await qrcode.toDataURL(qr);
           if (!res.headersSent) {
             return res.send({ qr: qrImage });
@@ -66,7 +67,7 @@ router.get("/", async (req, res) => {
 
         if (connection === "open") {
           try {
-            await delay(5000);
+            await delay(10000); // Credentials හරියට generate වෙන්න වෙලාව දෙනවා
             const user_jid = jidNormalizedUser(RobinQRWeb.user.id);
             const auth_path = "./session_qr/creds.json";
             const session_json = JSON.parse(fs.readFileSync(auth_path, "utf8"));
@@ -80,20 +81,22 @@ router.get("/", async (req, res) => {
 
             console.log(`✅ QR Session stored for ${user_jid}`);
 
-            const success_msg = `╔════════════════════╗\n ✨ *ZANTA-MD CONNECTED* ✨\n╚════════════════════╝\n\n*🚀 Status:* Successfully Linked (QR) ✅\n*👤 User:* ${user_jid.split('@')[0]}\n\n> QR එක මගින් සාර්ථකව සම්බන්ධ විය.`;
+            const success_msg = `╔════════════════════╗\n ✨ *ZANTA-MD CONNECTED* ✨\n╚════════════════════╝\n\n*🚀 Status:* Successfully Linked (QR) ✅\n*👤 User:* ${user_jid.split('@')[0]}\n\n> QR එක මගින් සාර්ථකව සම්බන්ධ විය. ඔබේ දත්ත සුරැකින ලදී.`;
             await RobinQRWeb.sendMessage(user_jid, { text: success_msg });
 
           } catch (e) {
             console.error("❌ QR DB Error:", e);
           } finally {
+            // ✅ සාර්ථකව වැඩේ ඉවර වුණාම සෙෂන් එක මකලා process එක kill කරනවා
             await delay(2000);
             clearSessionFolder();
+            console.log("♻️ QR Cleanup Done.");
             process.exit(0);
           }
         }
 
         if (connection === "close" && lastDisconnect?.error?.output?.statusCode !== 401) {
-            // connection error එකකදී නැවත උත්සාහ කරන්න අවශ්‍ය නම් මෙතන logic එක දාන්න පුළුවන්
+            // Connection එක වැහුණොත් ආයේ උත්සාහ කරන්න පුළුවන්
         }
       });
 
