@@ -22,6 +22,7 @@
     "rimraf": "^6.1.2",
     "@eslint/config-array": "^0.23.0",
     "@eslint/object-schema": "^3.0.0",
-    "eslint": "^9.39.2"
+    "eslint": "^9.39.2",
+    "dotenv": "^17.2.3"
    }
 }
