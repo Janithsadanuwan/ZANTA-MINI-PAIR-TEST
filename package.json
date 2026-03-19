@@ -1,28 +1,36 @@
 {
-"name": "Robin-web-pair",
+"name": "xpair",
     "version": "0.0.1",
     "description": "A multi functional whatsapp bot Web paircode.",
     "main": "index.js",
-    "scripts": {
-      "start": "pm2 start index.js --deep-monitoring --attach --name Robin",
-      "stop": "pm2 stop robin",
-     "restart": "pm2 restart robin"
-    },
+"scripts": {
+    "start": "pm2 start index.js --deep-monitoring --attach --name xpair",
+    "stop": "pm2 stop xpair",
+    "restart": "pm2 restart xpair"
+  },
   "dependencies": {
-    "@whiskeysockets/baileys": "^7.0.0-rc.8",
-    "qrcode": "^1.5.4",
-    "awesome-phonenumber": "^7.6.0",
-    "pino": "^10.1.0",
-    "phone" : "^3.1.69",
-    "body-parser": "^2.2.2",
-    "express": "^5.2.1",
+    "@whiskeysockets/baileys": "npm:gifted-baileys@^2.0.6",
+    "@adiwajshing/keyed-db": "^0.2.4",
+    "qrcode": "^1.5.3",
+    "awesome-phonenumber": "^2.64.0",
+    "pino": "^8.1.0",
+    "phone" : "3.1.30",
+    "body-parser": "^1.20.1",
+    "express": "^4.18.1",
     "path": "^0.12.7",
+    "jimp": "^0.16.1",
+    "async-mutex":"0.4.1",
+    "cheerio": "latest",
+    "axios": "^1.6.0",
+    "node-cache": "^5.1.2",
+    "dotenv": "^16.3.1",
     "mongoose": "^9.1.2",
     "pm2": "^6.0.14",
     "rimraf": "^6.1.2",
     "@eslint/config-array": "^0.23.0",
     "@eslint/object-schema": "^3.0.0",
     "eslint": "^9.39.2",
-    "dotenv": "^17.2.3"
+    "cors": "^2.8.5",
+    "mongodb": "^5.7.0"
    }
 }
