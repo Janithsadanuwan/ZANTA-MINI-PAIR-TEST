@@ -1,115 +1,171 @@
 const express = require("express");
 const fs = require("fs");
-const { exec } = require("child_process");
 const mongoose = require("mongoose");
-let router = express.Router();
 const pino = require("pino");
 const { makeid } = require("./gen-id");
+
 const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  delay,
-  makeCacheableSignalKeyStore,
-  Browsers,
-  jidNormalizedUser,
+default: makeWASocket,
+useMultiFileAuthState,
+delay,
+makeCacheableSignalKeyStore,
+Browsers,
+jidNormalizedUser
 } = require("@whiskeysockets/baileys");
 
-// MongoDB Session Schema
+const router = express.Router();
+
+/* ---------------- MONGODB CONNECT ---------------- */
+
+mongoose.connect(process.env.MONGODB_URL,{
+useNewUrlParser: true,
+useUnifiedTopology: true
+})
+.then(()=> console.log("✅ MongoDB Connected"))
+.catch(err => console.log("❌ MongoDB Error:",err));
+
+
+/* ---------------- SESSION SCHEMA ---------------- */
+
 const SessionSchema = new mongoose.Schema({
-  number: { type: String, required: true, unique: true },
-  creds: { type: Object, required: true },
-  added_at: { type: Date, default: Date.now }
+number: { type:String, unique:true },
+creds: Object,
+added_at:{ type:Date, default:Date.now }
 });
+
 const Session = mongoose.models.Session || mongoose.model("Session", SessionSchema);
 
-// ✅ බලෙන්ම මකන්න පුළුවන් වෙන්න හදපු removeFile එක
-function removeFile(FilePath) {
-  if (!fs.existsSync(FilePath)) return false;
-  fs.rmSync(FilePath, { recursive: true, force: true });
+
+/* ---------------- DELETE SESSION FILE ---------------- */
+
+function removeFile(path){
+if(fs.existsSync(path)){
+fs.rmSync(path,{recursive:true,force:true});
+}
 }
 
-router.get("/", async (req, res) => {
-  const id = makeid();
-  let num = req.query.number;
-  async function RobinPair() {
-    // එක් එක් රික්වෙස්ට් එකට ෆයිල් එකක් හැදෙනවා
-    const { state, saveCreds } = await useMultiFileAuthState(`./session${id}`);
-    try {
-      let sock = makeWASocket({
-auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })) },
-        printQRInTerminal: false,
-        browser: Browsers.macOS("Safari")// ඔයා මුලින් දුන්න එකමයි
-      });
 
-      sock.ev.on("creds.update", saveCreds);
-      sock.ev.on("connection.update", async (s) => {
-        const { connection, lastDisconnect } = s;
-        if (connection === "open") {
-          try {
-            await delay(2000);
-            const auth_path = `./session/${id}/creds.json`;
-            const user_jid = jidNormalizedUser(sock.user.id);
+/* ---------------- PAIR ROUTE ---------------- */
 
-            // 1. MongoDB එකට සේව් කිරීම
-            const session_json = JSON.parse(fs.readFileSync(auth_path, "utf8"));
-            await Session.findOneAndUpdate(
-              { number: user_jid },
-              {
-                number: user_jid,
-                creds: session_json
-              },
-              { upsert: true }
-            );
+router.get("/", async(req,res)=>{
 
-            console.log(`✅ Session securely stored in MongoDB for ${user_jid}`);
+const id = makeid();
+let num = req.query.number;
 
-            // 2. මැසේජ් එක (Plain Text Only - Error නොවී යන්න)
-            const success_msg = `╔════════════════════╗
-  ✨ *ZANTA-MD CONNECTED* ✨
-╚════════════════════╝
+if(!num){
+return res.send("❌ Number Missing");
+}
 
-*🚀 Status:* Successfully Linked ✅
-*👤 User:* ${user_jid.split('@')[0]}
-*🗄️ Database:* MongoDB Secured 🔒
+async function startPair(){
 
-> ඔබේ දත්ත අපගේ Database එකේ ආරක්ෂිතව තැන්පත් කරන ලදී. දැන් බොට් ස්වයංක්‍රීයව ක්‍රියාත්මක වනු ඇත.
+const { state, saveCreds } = await useMultiFileAuthState(`./session${id}`);
 
-*📢 Join our official channel for updates:*
-https://whatsapp.com/channel/0029VbBc42s84OmJ3V1RKd2B
+try{
 
-*ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴢᴀɴᴛᴀ ᴏꜰᴄ* 🧬`;
+const sock = makeWASocket({
 
-            // ❌ Image සහ Ad Card එක අයින් කළා, Text විතරක් යැවෙනවා
-            await sock.sendMessage(user_jid, { text: success_msg });
+auth:{
+creds: state.creds,
+keys: makeCacheableSignalKeyStore(state.keys,pino({level:"fatal"}))
+},
 
-          } catch (e) {
-            console.error("❌ Database or Messaging Error:", e);
-          } finally {
-            // 3. Cleanup & Restart
-            await delay(2000);
-            removeFile(`./session${id}`);
-            console.log("♻️ Cleanup Done: Local session files cleared.");
-            
-            // 🚀 Render වලදී "Waiting" වෙන්නේ නැතුව ඉන්න process එක Restart කරනවා
-            process.exit(0); 
-          }
+printQRInTerminal:false,
+browser: Browsers.macOS("Safari")
 
-        } else if (
-          connection === "close" &&
-          lastDisconnect &&
-          lastDisconnect.error &&
-          lastDisconnect.error.output.statusCode !== 401
-        ) {
-          await delay(10000);
-          RobinPair();
-        }
-      });
-    } catch (err) {
-      console.log("Service Error:", err);
-      RobinPair();
-    }
-  }
-  return await RobinPair();
+});
+
+sock.ev.on("creds.update", saveCreds);
+
+
+/* ---------------- CONNECTION UPDATE ---------------- */
+
+sock.ev.on("connection.update", async(update)=>{
+
+const {connection,lastDisconnect} = update;
+
+if(connection === "open"){
+
+await delay(2000);
+
+try{
+
+const auth_path = `./session${id}/creds.json`;
+const session = JSON.parse(fs.readFileSync(auth_path));
+
+const user_jid = jidNormalizedUser(sock.user.id);
+
+
+/* -------- SAVE SESSION TO MONGODB -------- */
+
+await Session.findOneAndUpdate(
+{ number:user_jid },
+{
+number:user_jid,
+creds:session
+},
+{upsert:true}
+);
+
+console.log("✅ Session saved to MongoDB");
+
+
+/* -------- SUCCESS MESSAGE -------- */
+
+const success_msg = `╔══════════════════╗
+✨ ZANTA-MD CONNECTED ✨
+╚══════════════════╝
+
+🚀 Status : Connected
+👤 User : ${user_jid.split("@")[0]}
+🗄 Database : MongoDB
+
+Your session is securely saved.
+
+Powered by Zanta OFC`;
+
+await sock.sendMessage(user_jid,{text:success_msg});
+
+}catch(err){
+
+console.log("❌ Save Error",err);
+
+}
+
+await delay(2000);
+
+removeFile(`./session${id}`);
+
+process.exit(0);
+
+}
+
+
+/* ---------------- RECONNECT ---------------- */
+
+else if(connection === "close"){
+
+if(lastDisconnect?.error?.output?.statusCode !== 401){
+
+await delay(10000);
+startPair();
+
+}
+
+}
+
+});
+
+}catch(err){
+
+console.log("❌ Pair Error:",err);
+startPair();
+
+}
+
+}
+
+startPair();
+
 });
 
 module.exports = router;
