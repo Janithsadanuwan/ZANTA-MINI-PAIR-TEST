@@ -15,16 +15,6 @@ jidNormalizedUser
 
 const router = express.Router();
 
-/* ---------------- MONGODB CONNECT ---------------- */
-
-mongoose.connect(process.env.MONGODB_URL,{
-useNewUrlParser: true,
-useUnifiedTopology: true
-})
-.then(()=> console.log("✅ MongoDB Connected"))
-.catch(err => console.log("❌ MongoDB Error:",err));
-
-
 /* ---------------- SESSION SCHEMA ---------------- */
 
 const SessionSchema = new mongoose.Schema({
@@ -38,23 +28,26 @@ const Session = mongoose.models.Session || mongoose.model("Session", SessionSche
 
 /* ---------------- DELETE SESSION FILE ---------------- */
 
-function removeFile(path){
-if(fs.existsSync(path)){
-fs.rmSync(path,{recursive:true,force:true});
+function removeFile(FilePath){
+if(fs.existsSync(FilePath)){
+fs.rmSync(FilePath,{recursive:true,force:true});
 }
 }
 
 
 /* ---------------- PAIR ROUTE ---------------- */
 
-router.get("/", async(req,res)=>{
+router.get("/", async(req, res) => {
 
 const id = makeid();
 let num = req.query.number;
 
 if(!num){
-return res.send("❌ Number Missing");
+return res.send({ code: "❌ Number Missing" });
 }
+
+// Clean the number - remove non-digits
+num = num.replace(/[^0-9]/g, "");
 
 async function startPair(){
 
@@ -63,25 +56,33 @@ const { state, saveCreds } = await useMultiFileAuthState(`./session${id}`);
 try{
 
 const sock = makeWASocket({
-
 auth:{
 creds: state.creds,
-keys: makeCacheableSignalKeyStore(state.keys,pino({level:"fatal"}))
+keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" }))
 },
-
-printQRInTerminal:false,
-browser: Browsers.macOS("Safari")
-
+printQRInTerminal: false,
+logger: pino({ level: "fatal" }).child({ level: "fatal" }),
+browser: Browsers.ubuntu("Chrome"),
 });
 
 sock.ev.on("creds.update", saveCreds);
 
+// Wait for socket to be ready then request pairing code
+if(!sock.authState.creds.registered){
+await delay(1500);
+num = num.replace(/\D/g, "");
+const code = await sock.requestPairingCode(num);
+const formattedCode = code?.match(/.{1,4}/g)?.join("-") || code;
+if(!res.headersSent){
+res.json({ code: formattedCode });
+}
+}
 
 /* ---------------- CONNECTION UPDATE ---------------- */
 
-sock.ev.on("connection.update", async(update)=>{
+sock.ev.on("connection.update", async(update) => {
 
-const {connection,lastDisconnect} = update;
+const { connection, lastDisconnect } = update;
 
 if(connection === "open"){
 
@@ -94,20 +95,15 @@ const session = JSON.parse(fs.readFileSync(auth_path));
 
 const user_jid = jidNormalizedUser(sock.user.id);
 
-
 /* -------- SAVE SESSION TO MONGODB -------- */
 
 await Session.findOneAndUpdate(
-{ number:user_jid },
-{
-number:user_jid,
-creds:session
-},
-{upsert:true}
+{ number: user_jid },
+{ number: user_jid, creds: session },
+{ upsert: true }
 );
 
 console.log("✅ Session saved to MongoDB");
-
 
 /* -------- SUCCESS MESSAGE -------- */
 
@@ -123,43 +119,35 @@ Your session is securely saved.
 
 Powered by Zanta OFC`;
 
-await sock.sendMessage(user_jid,{text:success_msg});
+await sock.sendMessage(user_jid, { text: success_msg });
 
-}catch(err){
-
-console.log("❌ Save Error",err);
-
+} catch(err){
+console.log("❌ Save Error", err);
 }
 
 await delay(2000);
-
 removeFile(`./session${id}`);
-
 process.exit(0);
 
 }
 
-
-/* ---------------- RECONNECT ---------------- */
-
 else if(connection === "close"){
 
 if(lastDisconnect?.error?.output?.statusCode !== 401){
-
 await delay(10000);
 startPair();
-
 }
 
 }
 
 });
 
-}catch(err){
-
-console.log("❌ Pair Error:",err);
-startPair();
-
+} catch(err){
+console.log("❌ Pair Error:", err);
+removeFile(`./session${id}`);
+if(!res.headersSent){
+res.json({ code: "❌ Error getting code, try again" });
+}
 }
 
 }
